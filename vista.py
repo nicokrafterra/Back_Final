@@ -44,7 +44,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 #-----------------------------------------------------------------------------------------
 
-app.mount("/imagenes", StaticFiles(directory="imagenes"), name="imagenes")
+app.mount("/Imagenes", StaticFiles(directory="Imagenes"), name="Imagenes")
 
 app.add_middleware(
     CORSMiddleware,
