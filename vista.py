@@ -48,7 +48,8 @@ app.mount("/Imagenes", StaticFiles(directory="Imagenes"), name="Imagenes")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[   "https://frontfinal-production.up.railway.app",
+    "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],  
     allow_headers=["*"]
