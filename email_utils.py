@@ -28,7 +28,7 @@ class EmailSchema(BaseModel):
 # Función para enviar el correo con el enlace de recuperación
 async def send_reset_email(email: str, token: str):
     logger.debug(f"Preparando para enviar correo a: {email}")
-    reset_url = f"http://localhost:5173/ResetPassword?token={token}"
+    reset_url = f"https://frontfinal-production.up.railway.app/ResetPassword?token={token}"
     logger.debug(f"URL de recuperación: {reset_url}")
 
     message = MessageSchema(
