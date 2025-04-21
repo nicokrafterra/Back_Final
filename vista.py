@@ -141,7 +141,7 @@ async def subir_imagen_usuario(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
 
-    imagen_path = f"imagenes/{imagen.filename}"
+    imagen_path = f"Imagenes/{imagen.filename}"
     os.makedirs(os.path.dirname(imagen_path), exist_ok=True)
     with open(imagen_path, "wb") as f:
         f.write(await imagen.read())
@@ -207,7 +207,7 @@ async def actualizar_imagen(
     if file.content_type not in formatos_permitidos:
         raise HTTPException(status_code=400, detail="Formato de archivo no soportado")
     
-    directorio_imagenes = "imagenes"
+    directorio_imagenes = "Imagenes"
     os.makedirs(directorio_imagenes, exist_ok=True)
     file_location = os.path.join(directorio_imagenes, file.filename)
     with open(file_location, "wb") as buffer:
