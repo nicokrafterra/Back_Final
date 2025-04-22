@@ -1,11 +1,11 @@
 #-----------------------------------------------------------------------------------------
 #Se realizan todas las importaciones necesarias
-from typing import List, Optional
+from typing import List
 import bcrypt
 from fastapi import FastAPI, APIRouter , Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from conexion import crear, get_db
-from modelo import Base, TipoPlan, Usuario, Reserva, Pqr
+from modelo import Base, Usuario, Reserva, Pqr
 from schemas import RespuestaPQR, UsuarioBase as cli
 from schemas import ReservaU as usu
 from schemas import Login 
@@ -48,10 +48,12 @@ app.mount("/Imagenes", StaticFiles(directory="Imagenes"), name="Imagenes")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[   "https://frontfinal-production.up.railway.app",
+    "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],  
     allow_headers=["*"]
+    
     )
 
 @app.get("/")
@@ -492,247 +494,57 @@ async def generar_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Se
 
 #-----------------------------------------------------------------------------------------
 #Metodos de Palnes
-
-@app.put("/planes/{plan_id}", response_model=PlanResponse)
-async def actualizar_plan(
-    plan_id: int, 
-    plan_actualizado: PlanCreate, 
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    # Verificar si el usuario es admin
-    if not current_user.esAdmin:
-        raise HTTPException(
-            status_code=403,
-            detail="No tienes permisos para actualizar planes"
-        )
-    
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan no encontrado")
-
-    # Verificar si el nuevo nombre ya existe en otro plan
-    if plan_actualizado.nombre != plan.nombre:
-        plan_existente = db.query(Plan).filter(
-            Plan.nombre == plan_actualizado.nombre,
-            Plan.id != plan_id
-        ).first()
-        if plan_existente:
-            raise HTTPException(
-                status_code=400,
-                detail="Ya existe un plan con ese nombre"
-            )
-
-    # Actualizar los campos del plan
-    plan.nombre = plan_actualizado.nombre
-    plan.descripcion = plan_actualizado.descripcion
-    plan.tipo = plan_actualizado.tipo
-    plan.cantidad_maxima = plan_actualizado.cantidad_maxima
-    plan.precio = plan_actualizado.precio
-    
-    # Actualizar disponibilidad basada en la nueva cantidad máxima
-    if plan.cantidad_actual >= plan_actualizado.cantidad_maxima:
-        plan.disponible = False
-    else:
-        plan.disponible = True
-
-    db.commit()
-    db.refresh(plan)
-    return plan
-
-
-@app.post("/planes/{plan_id}/imagen")
-async def subir_imagen_plan(
-    plan_id: int,
-    imagen: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    # Verificar si el usuario es admin
-    if not current_user.esAdmin:
-        raise HTTPException(
-            status_code=403,
-            detail="No tienes permisos para actualizar imágenes de planes"
-        )
-    
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan no encontrado")
-
-    # Validar formato de imagen
-    formatos_permitidos = ["image/jpeg", "image/png", "image/gif", "image/webp"]
-    if imagen.content_type not in formatos_permitidos:
-        raise HTTPException(
-            status_code=400,
-            detail="Formato de imagen no soportado"
-        )
-
-    # Crear directorio si no existe
-    directorio_imagenes = "Imagenes/planes"
-    os.makedirs(directorio_imagenes, exist_ok=True)
-    
-    # Generar nombre único para la imagen
-    extension = os.path.splitext(imagen.filename)[1]
-    nombre_imagen = f"plan_{plan_id}{extension}"
-    file_location = os.path.join(directorio_imagenes, nombre_imagen)
-
-    # Guardar la imagen
-    with open(file_location, "wb") as buffer:
-        buffer.write(await imagen.read())
-
-    # Actualizar la ruta de la imagen en la base de datos
-    plan.imagen = file_location
-    db.commit()
-    db.refresh(plan)
-
-    return {
-        "message": "Imagen del plan actualizada exitosamente",
-        "ruta": file_location
-    }
-
-@app.get("/planes/{tipo}/tipo", response_model=List[PlanResponse])
-def obtener_planes_por_tipo(
-    tipo: str, 
-    db: Session = Depends(get_db),
-    disponibilidad: Optional[bool] = None
-):
-    try:
-        # Validar que el tipo sea uno de los permitidos
-        tipo_validado = TipoPlan(tipo)
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Tipo de plan no válido. Los tipos permitidos son: {[e.value for e in TipoPlan]}"
-        )
-    
-    query = db.query(Plan).filter(Plan.tipo == tipo_validado)
-    
-    # Filtrar por disponibilidad si se especifica
-    if disponibilidad is not None:
-        query = query.filter(Plan.disponible == disponibilidad)
-    
-    planes = query.all()
-    
+@app.get("/planes/{tipo}/tipo")
+def obtener_planes_por_tipo(tipo: str, db: Session = Depends(get_db)):
+    planes = db.query(Plan).filter(Plan.tipo == tipo).all()
     if not planes:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No se encontraron planes del tipo {tipo}"
-        )
-    
+        raise HTTPException(status_code=404, detail=f"No se encontraron planes del tipo {tipo}.")
     return planes
 
 @app.post("/planes", response_model=PlanResponse)
-def crear_plan(
-    plan: PlanCreate, 
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    try:
-        if not current_user.esAdmin:
-            raise HTTPException(status_code=403, detail="No tienes permisos para crear planes")
-        
-        # Validar campos requeridos
-        if not all([plan.nombre, plan.descripcion, plan.tipo, plan.cantidad_maxima, plan.precio is not None]):
-            raise HTTPException(status_code=422, detail="Faltan campos requeridos")
-        
-        plan_existente = db.query(Plan).filter(Plan.nombre == plan.nombre).first()
-        if plan_existente:
-            raise HTTPException(status_code=400, detail="El nombre del plan ya existe")
-        
-        nuevo_plan = Plan(
-            nombre=plan.nombre,
-            descripcion=plan.descripcion,
-            tipo=plan.tipo,
-            cantidad_maxima=plan.cantidad_maxima,
-            cantidad_actual=0,
-            disponible=True,
-            precio=plan.precio,
-            imagen=plan.imagen
-        )
-        
-        db.add(nuevo_plan)
-        db.commit()
-        db.refresh(nuevo_plan)
-        return nuevo_plan
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
+def crear_plan(plan: PlanCreate, db: Session = Depends(get_db)):
+    plan_existente = db.query(Plan).filter(Plan.nombre == plan.nombre).first()
+    if plan_existente:
+        raise HTTPException(status_code=400, detail="El nombre del plan ya existe.")
     
-# Método para obtener todos los planes, con filtros opcionales
-@app.get("/planes/", response_model=List[PlanResponse])
-async def obtener_planes(
-    db: Session = Depends(get_db),
-    disponibilidad: Optional[bool] = None,
-    tipo: Optional[str] = None
-):
-    query = db.query(Plan)
-    
-    # Aplicar filtros si se proporcionan
-    if disponibilidad is not None:
-        query = query.filter(Plan.disponible == disponibilidad)
-    
-    if tipo is not None:
-        try:
-            tipo_validado = TipoPlan(tipo)
-            query = query.filter(Plan.tipo == tipo_validado)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Tipo de plan no válido. Los tipos permitidos son: {[e.value for e in TipoPlan]}"
-            )
-    
-    planes = query.all()
+    nuevo_plan = Plan(
+        nombre=plan.nombre,
+        descripcion=plan.descripcion,
+        tipo=plan.tipo,
+        cantidad_maxima=plan.cantidad_maxima,
+        cantidad_actual=0,
+        disponible=True
+    )
+    db.add(nuevo_plan)
+    db.commit()
+    db.refresh(nuevo_plan)
+    return nuevo_plan
+
+@app.get("/planes/", response_model=List[PlanResponse])  
+async def obtener_pqrs(db: Session = Depends(get_db)):
+    planes = db.query(Plan).all() 
     return planes
 
-@app.put("/planes/{plan_id}/actualizar-disponibilidad", response_model=PlanResponse)
-def actualizar_disponibilidad(
-    plan_id: int, 
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    # Verificar si el usuario es admin
-    if not current_user.esAdmin:
-        raise HTTPException(
-            status_code=403,
-            detail="No tienes permisos para actualizar disponibilidad de planes"
-        )
-    
+@app.put("/planes/{plan_id}/actualizar-disponibilidad", response_model=dict)
+def actualizar_disponibilidad(plan_id: int, db: Session = Depends(get_db)):
     plan = db.query(Plan).filter(Plan.id == plan_id).first()
     
     if not plan:
         raise HTTPException(status_code=404, detail="Plan no encontrado")
-    
-    # Actualizar disponibilidad basada en la capacidad
-    if plan.cantidad_actual >= plan.cantidad_maxima:
+    if plan.cantidad_actual == plan.cantidad_maxima:
         plan.disponible = False
-    else:
-        plan.disponible = True
+        db.commit()  
+        return {"mensaje": "El estado del plan ha sido actualizado a no disponible"}
     
-    db.commit()
-    db.refresh(plan)
-    
-    return plan
+    return {"mensaje": "El plan aún está disponible"}
 
 
 @app.delete("/planes/{plan_id}")
-async def eliminar_plan(
-    plan_id: int, 
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    # Verificar si el usuario es admin
-    if not current_user.esAdmin:
-        raise HTTPException(
-            status_code=403,
-            detail="No tienes permisos para eliminar planes"
-        )
-    
+async def eliminar_plan(plan_id: int, db: Session = Depends(get_db)):
     plan = db.query(Plan).filter(Plan.id == plan_id).first()
     
     if not plan:
         raise HTTPException(status_code=404, detail="Plan no encontrado")
-    
     reservas_asociadas = db.query(Reserva).filter(Reserva.plan_id == plan_id).first()
     if reservas_asociadas:
         raise HTTPException(
@@ -740,27 +552,8 @@ async def eliminar_plan(
             detail="No se puede eliminar el plan porque tiene reservas asociadas"
         )
 
-    # Eliminar la imagen asociada si existe
-    if plan.imagen and os.path.exists(plan.imagen):
-        try:
-            os.remove(plan.imagen)
-        except Exception as e:
-            logger.error(f"Error al eliminar la imagen del plan: {str(e)}")
-
     db.delete(plan)
     db.commit()
 
     return {"detail": "Plan eliminado exitosamente"}
-
-
-
-@app.get("/planes/{plan_id}", response_model=PlanResponse)
-async def obtener_plan(
-    plan_id: int, 
-    db: Session = Depends(get_db)
-):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan no encontrado")
-    return plan
 #-----------------------------------------------------------------------------------------
