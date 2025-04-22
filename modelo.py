@@ -64,4 +64,7 @@ class Plan(Base):
     cantidad_actual = Column(Integer, default=0)
     disponible = Column(Boolean, default=True)
     
+    imagen = Column(String(255), nullable=True)
+    precio = Column(Integer, nullable=False, default=0) 
+    
     reservas = relationship("Reserva", back_populates="plan")
