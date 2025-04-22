@@ -627,36 +627,39 @@ def crear_plan(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    # Verificar si el usuario es admin
-    if not current_user.esAdmin:
-        raise HTTPException(
-            status_code=403,
-            detail="No tienes permisos para crear planes"
+    try:
+        if not current_user.esAdmin:
+            raise HTTPException(status_code=403, detail="No tienes permisos para crear planes")
+        
+        # Validar campos requeridos
+        if not all([plan.nombre, plan.descripcion, plan.tipo, plan.cantidad_maxima, plan.precio is not None]):
+            raise HTTPException(status_code=422, detail="Faltan campos requeridos")
+        
+        plan_existente = db.query(Plan).filter(Plan.nombre == plan.nombre).first()
+        if plan_existente:
+            raise HTTPException(status_code=400, detail="El nombre del plan ya existe")
+        
+        nuevo_plan = Plan(
+            nombre=plan.nombre,
+            descripcion=plan.descripcion,
+            tipo=plan.tipo,
+            cantidad_maxima=plan.cantidad_maxima,
+            cantidad_actual=0,
+            disponible=True,
+            precio=plan.precio,
+            imagen=plan.imagen
         )
+        
+        db.add(nuevo_plan)
+        db.commit()
+        db.refresh(nuevo_plan)
+        return nuevo_plan
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
     
-    plan_existente = db.query(Plan).filter(Plan.nombre == plan.nombre).first()
-    if plan_existente:
-        raise HTTPException(
-            status_code=400,
-            detail="El nombre del plan ya existe"
-        )
-    
-    nuevo_plan = Plan(
-        nombre=plan.nombre,
-        descripcion=plan.descripcion,
-        tipo=plan.tipo,
-        cantidad_maxima=plan.cantidad_maxima,
-        cantidad_actual=0,
-        disponible=True,
-        precio=plan.precio,
-        imagen=plan.imagen
-    )
-    
-    db.add(nuevo_plan)
-    db.commit()
-    db.refresh(nuevo_plan)
-    return nuevo_plan
-
+# Método para obtener todos los planes, con filtros opcionales
 @app.get("/planes/", response_model=List[PlanResponse])
 async def obtener_planes(
     db: Session = Depends(get_db),
