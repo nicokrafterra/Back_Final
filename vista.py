@@ -48,8 +48,7 @@ app.mount("/Imagenes", StaticFiles(directory="Imagenes"), name="Imagenes")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[   "https://frontfinal-production.up.railway.app",
-    "http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],  
     allow_headers=["*"]
@@ -762,4 +761,4 @@ async def obtener_plan(
     if not plan:
         raise HTTPException(status_code=404, detail="Plan no encontrado")
     return plan
-#----------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------
