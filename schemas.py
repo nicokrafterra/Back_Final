@@ -53,8 +53,6 @@ class PlanBase(BaseModel):
     descripcion: str
     tipo: TipoPlan
     cantidad_maxima: int
-    imagen: Optional[str] = None  # Campo nuevo
-    precio: int  
 
 class PlanCreate(PlanBase):
     pass
